@@ -44,7 +44,7 @@ func main() {
 	flag.StringVar(&fBindAddress, "bindAddress", "localhost:9993", "address to bind http socket")
 	flag.StringVar(&fKubeConfig, "kubeconfig", "", "kubeconfig to use, if not set InClusterConfig is used, can be set by KUBECONFIG envvar")
 	flag.StringVar(&fNodeName, "nodename", "", "the name of the node running the service. Can be set by NODE_NAME envvar")
-	flag.StringVar(&fLeaseNamespace, "leasenamespace", "default", "the namespace for the lease")
+	flag.StringVar(&fLeaseNamespace, "leasenamespace", "", "the namespace for the lease, can be set by the NAMESPACE envvar")
 
 	// klog.InitFlags(flag.CommandLine)
 	flag.Parse()
@@ -101,6 +101,15 @@ func initService(ctx xhdl.Context) {
 	// kubeconfig and create Config struct
 	k8sConfig := getK8sConfig(ctx)
 	k8s = kubernetes.NewForConfigOrDie(k8sConfig)
+
+	// namespace handling
+	if fLeaseNamespace == "" {
+		fLeaseNamespace = os.Getenv("NAMESPACE")
+
+		if fLeaseNamespace == "" {
+			ctx.Throw(fmt.Errorf("--leasenamespace arg or NAMESPACE env var required"))
+		}
+	}
 
 	// init kmutex
 	km = kmutex.Kmutex{

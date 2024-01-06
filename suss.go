@@ -38,6 +38,7 @@ const (
 	labelSync           = labelPrefix + "lockowner"
 	labelDelayedRelease = labelPrefix + "delayedrelease"
 	labelLastRelease    = labelPrefix + "lastrelease"
+	labelCriticalPod    = labelPrefix + "critical"
 )
 
 func main() {
@@ -77,6 +78,7 @@ func registerCommand(name string, fn func(ctx xhdl.Context) string) {
 		err := xhdl.RunContext(r.Context(), func(ctx xhdl.Context) {
 			response := fn(ctx)
 			io.WriteString(w, response)
+			io.WriteString(w, "\n")
 		})
 
 		if err != nil {
@@ -182,7 +184,7 @@ func cmdTeardown(ctx xhdl.Context) string {
 	// condon
 	own.Cordoned(ctx, true)
 
-	// get pods with label wd-suss-critical
+	// get pods with critical label
 	criticalPods := own.CriticalPods(ctx)
 	for _, pod := range criticalPods {
 		apiEvictPod(ctx, pod.Namespace, pod.Name)
@@ -190,7 +192,7 @@ func cmdTeardown(ctx xhdl.Context) string {
 
 	// should loop until no critical pods found
 
-	return ""
+	return "OK"
 }
 
 func cmdRelease(ctx xhdl.Context) string {
@@ -277,7 +279,7 @@ func trySynchronize(ctx xhdl.Context) bool {
 
 func (n Node) CriticalPods(ctx xhdl.Context) []v1.Pod {
 	listOpts := metav1.ListOptions{}
-	listOpts.LabelSelector = "wd-suss-critical=true"
+	listOpts.LabelSelector = labelCriticalPod + "=true"
 
 	pods, err := k8s.CoreV1().Pods(metav1.NamespaceAll).List(ctx, listOpts)
 	ctx.Throw(err)

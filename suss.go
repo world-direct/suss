@@ -50,11 +50,9 @@ func main() {
 	// klog.InitFlags(flag.CommandLine)
 	flag.Parse()
 
-	klog.Infof("Using namespace %s for the Lease", fLeaseNamespace)
-
 	err := xhdl.Run(initService)
 	if err != nil {
-		fmt.Println(err)
+		klog.Error(err)
 		os.Exit(1)
 	}
 
@@ -113,12 +111,15 @@ func initService(ctx xhdl.Context) {
 		}
 	}
 
+	klog.Infof("Using namespace %s for the Lease", fLeaseNamespace)
+
 	// init kmutex
 	km = kmutex.Kmutex{
 		LeaseName:      "sync",
 		LeaseNamespace: fLeaseNamespace,
 		HolderIdentity: fNodeName,
 		Clientset:      k8s,
+		RetryInterval:  time.Second,
 	}
 
 	// get our node to test the connection and validate the argument
@@ -250,7 +251,10 @@ func apiEvictPod(ctx xhdl.Context, ns string, name string) {
 // trys sync one time, returns true if succesful
 func trySynchronize(ctx xhdl.Context) bool {
 
-	km.Acquire(ctx)
+	if !km.TryAcquire(ctx) {
+		return false
+	}
+
 	defer km.Release(ctx)
 
 	ns := getNodeSet(ctx)

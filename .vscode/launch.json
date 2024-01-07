@@ -12,7 +12,8 @@
             "program": "${workspaceFolder}",
             "args": [
                 "--kubeconfig", "kubeconfig.secret", 
-                "--nodename", "rke2-api-node-c0a24c23-k7qft.wd.loc"
+                "--nodename", "rke2-api-node-c0a24c23-k7qft.wd.loc",    // 	rke2-api-node-c0a24c23-zwxnw.wd.loc rke2-api-node-c0a24c23-k7qft.wd.loc
+                "--leasenamespace", "default"
             ]
         }
     ]

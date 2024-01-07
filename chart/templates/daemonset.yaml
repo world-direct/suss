@@ -16,7 +16,7 @@ spec:
       containers:
         - name: suss
           env:
-            - name: NODE_NAME
+            - name: NODENAME
               valueFrom:
                 fieldRef:
                   apiVersion: v1

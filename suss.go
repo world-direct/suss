@@ -11,7 +11,9 @@ import (
 	"github.com/gprossliner/xhdl"
 	"github.com/world-direct/kmutex"
 	"github.com/world-direct/looper"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+
 	policyv1 "k8s.io/api/policy/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -29,7 +31,7 @@ var (
 	fNodeName       string
 	fLeaseNamespace string
 
-	k8s *kubernetes.Clientset
+	k8s kubernetes.Interface
 	km  kmutex.Kmutex
 )
 
@@ -91,11 +93,11 @@ func initService(ctx xhdl.Context) {
 
 	// validate nodename
 	if fNodeName == "" {
-		fNodeName = os.Getenv("NODE_NAME")
+		fNodeName = os.Getenv("NODENAME")
 	}
 
 	if fNodeName == "" {
-		ctx.Throw(fmt.Errorf("--nodename arg or NODE_NAME env var required"))
+		ctx.Throw(fmt.Errorf("--nodename arg or NODENAME env var required"))
 	}
 
 	// kubeconfig and create Config struct
@@ -128,6 +130,9 @@ func initService(ctx xhdl.Context) {
 
 	// check for delayed release
 	own := getNodeSet(ctx).OwnNode()
+
+	testpods := own.CriticalPods2(ctx)
+	_ = testpods
 
 	if own.GetLabel(ctx, labelDelayedRelease) == "true" {
 		klog.Infof("Node marked for delayed release, releasing lock now")
@@ -170,7 +175,6 @@ func cmdHealthz(w http.ResponseWriter, r *http.Request) {
 func cmdSynchronize(ctx xhdl.Context) string {
 
 	looper.Loop(ctx, time.Second*10, func(ctx xhdl.Context) (exit bool) {
-		klog.Info("retry synchronize")
 		return trySynchronize(ctx)
 	})
 
@@ -191,7 +195,7 @@ func cmdTeardown(ctx xhdl.Context) string {
 		apiEvictPod(ctx, pod.Namespace, pod.Name)
 	}
 
-	// should loop until no critical pods found
+	// TODO: should loop until no critical pods found
 
 	return "OK"
 }
@@ -242,6 +246,9 @@ func apiEvictPod(ctx xhdl.Context, ns string, name string) {
 		return
 	}
 
+	// TODO: we need to make furter tests about possible error codes
+	// I didn't manage to produce any of the documented errors, but this may
+	// need special pods like some that will need more time to terminate
 	ctx.Throw(err)
 
 	// k8s.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
@@ -250,6 +257,8 @@ func apiEvictPod(ctx xhdl.Context, ns string, name string) {
 
 // trys sync one time, returns true if succesful
 func trySynchronize(ctx xhdl.Context) bool {
+
+	klog.Info("try synchronize")
 
 	if !km.TryAcquire(ctx) {
 		return false
@@ -306,6 +315,72 @@ func (n Node) CriticalPods(ctx xhdl.Context) []v1.Pod {
 	return lst
 }
 
+func (n Node) CriticalPods2(ctx xhdl.Context) []v1.Pod {
+	listOpts := metav1.ListOptions{}
+	listOpts.FieldSelector = fmt.Sprintf("spec.nodeName=%s,status.phase=Running", n.Name())
+
+	pods, err := k8s.CoreV1().Pods(metav1.NamespaceAll).List(ctx, listOpts)
+	ctx.Throw(err)
+
+	var lst []v1.Pod
+	for _, pod := range pods.Items {
+		if isPodCritical(ctx, &pod) {
+			lst = append(lst, pod)
+		}
+	}
+	return lst
+}
+
+func isPodCritical(ctx xhdl.Context, pod *v1.Pod) bool {
+
+	// check if pod has the critical label explicitly set to true
+	if pod.Labels[labelCriticalPod] == "true" {
+		klog.Infof("Pod %s/%s is critical %s", pod.Namespace, pod.Name, labelCriticalPod)
+		return true
+	}
+
+	// check if pod has the critical label explicitly set to false
+	if pod.Labels[labelCriticalPod] == "false" {
+		klog.Infof("Pod %s/%s is explicitly not critical", pod.Namespace, pod.Name)
+		return true
+	}
+
+	// check if pod is part of a StatefulSet
+	for _, or := range pod.OwnerReferences {
+		if isCriticalOwner(ctx, or, pod) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isCriticalOwner(ctx xhdl.Context, or metav1.OwnerReference, pod *v1.Pod) bool {
+
+	// check StatefulSet
+	if or.APIVersion == appsv1.SchemeGroupVersion.Identifier() && or.Kind == "StatefulSet" {
+		klog.Infof("Pod %s/%s is critical (Statefulset)", pod.Namespace, pod.Name)
+		return true
+	}
+
+	// check ReplicaSet (for Deployments)
+	if or.APIVersion == appsv1.SchemeGroupVersion.Identifier() && or.Kind == "ReplicaSet" {
+
+		// with only one replica
+		rs, err := k8s.AppsV1().ReplicaSets(pod.Namespace).Get(ctx, or.Name, metav1.GetOptions{})
+		ctx.Throw(err)
+
+		if rs.Status.Replicas == 1 {
+			klog.Infof("Pod %s/%s is critical (only one replica)", pod.Namespace, pod.Name)
+			return true
+		} else {
+			return false
+		}
+	}
+
+	return false
+}
+
 func apiGetNode(ctx xhdl.Context, hostname string) *v1.Node {
 	node, err := k8s.CoreV1().Nodes().Get(ctx, hostname, metav1.GetOptions{})
 	ctx.Throw(err)
@@ -323,10 +398,6 @@ type Node struct {
 
 func (n Node) Name() string {
 	return n.node.Name
-}
-
-func (n Node) ResourceVersion() string {
-	return n.node.ResourceVersion
 }
 
 func getNodeSet(ctx xhdl.Context) NodeSet {

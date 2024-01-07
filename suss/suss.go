@@ -1,11 +1,7 @@
-package main
+package suss
 
 import (
-	"flag"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"time"
 
 	"github.com/gprossliner/xhdl"
@@ -20,20 +16,27 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 )
 
-var (
-	fBindAddress    string
-	fKubeConfig     string
-	fNodeName       string
-	fLeaseNamespace string
+type SussOptions struct {
+	NodeName       string
+	LeaseNamespace string
+	K8s            kubernetes.Interface
+}
 
-	k8s kubernetes.Interface
-	km  kmutex.Kmutex
-)
+type service struct {
+	km kmutex.Kmutex
+	SussOptions
+}
+
+type Service interface {
+	Start(ctx xhdl.Context)
+	Synchronize(ctx xhdl.Context) string
+	Teardown(ctx xhdl.Context) string
+	Release(ctx xhdl.Context) string
+	ReleaseDelayed(ctx xhdl.Context) string
+}
 
 const (
 	labelPrefix         = "suss.world-direct.at/"
@@ -43,147 +46,53 @@ const (
 	labelCriticalPod    = labelPrefix + "critical"
 )
 
-func main() {
-	flag.StringVar(&fBindAddress, "bindAddress", "localhost:9993", "address to bind http socket")
-	flag.StringVar(&fKubeConfig, "kubeconfig", "", "kubeconfig to use, if not set InClusterConfig is used, can be set by KUBECONFIG envvar")
-	flag.StringVar(&fNodeName, "nodename", "", "the name of the node running the service. Can be set by NODE_NAME envvar")
-	flag.StringVar(&fLeaseNamespace, "leasenamespace", "", "the namespace for the lease, can be set by the NAMESPACE envvar")
+func NewService(options SussOptions) Service {
 
-	// klog.InitFlags(flag.CommandLine)
-	flag.Parse()
-
-	err := xhdl.Run(initService)
-	if err != nil {
-		klog.Error(err)
-		os.Exit(1)
+	// init struct
+	srv := service{
+		SussOptions: options,
+		km: kmutex.Kmutex{
+			LeaseName:      "sync",
+			LeaseNamespace: options.LeaseNamespace,
+			HolderIdentity: options.NodeName,
+			Clientset:      options.K8s,
+			RetryInterval:  time.Second,
+		},
 	}
 
-	http.HandleFunc("/version", cmdVersion)
-	http.HandleFunc("/healthz", cmdHealthz)
-
-	registerCommand("synchronize", cmdSynchronize)
-	registerCommand("teardown", cmdTeardown)
-	registerCommand("release", cmdRelease)
-	registerCommand("releasedelayed", cmdReleaseDelayed)
-
-	klog.Infof("listen on %s\n", fBindAddress)
-	http.ListenAndServe(fBindAddress, nil)
+	return srv
 }
 
-func registerCommand(name string, fn func(ctx xhdl.Context) string) {
-	http.HandleFunc("/"+name, func(w http.ResponseWriter, r *http.Request) {
-
-		klog.Infof("/%s\n", name)
-
-		err := xhdl.RunContext(r.Context(), func(ctx xhdl.Context) {
-			response := fn(ctx)
-			io.WriteString(w, response)
-			io.WriteString(w, "\n")
-		})
-
-		if err != nil {
-			klog.Error(err.Error())
-			io.WriteString(w, err.Error())
-			w.WriteHeader(500)
-		}
-	})
-}
-
-func initService(ctx xhdl.Context) {
-
-	// validate nodename
-	if fNodeName == "" {
-		fNodeName = os.Getenv("NODENAME")
-	}
-
-	if fNodeName == "" {
-		ctx.Throw(fmt.Errorf("--nodename arg or NODENAME env var required"))
-	}
-
-	// kubeconfig and create Config struct
-	k8sConfig := getK8sConfig(ctx)
-	k8s = kubernetes.NewForConfigOrDie(k8sConfig)
-
-	// namespace handling
-	if fLeaseNamespace == "" {
-		fLeaseNamespace = os.Getenv("NAMESPACE")
-
-		if fLeaseNamespace == "" {
-			ctx.Throw(fmt.Errorf("--leasenamespace arg or NAMESPACE env var required"))
-		}
-	}
-
-	klog.Infof("Using namespace %s for the Lease", fLeaseNamespace)
-
-	// init kmutex
-	km = kmutex.Kmutex{
-		LeaseName:      "sync",
-		LeaseNamespace: fLeaseNamespace,
-		HolderIdentity: fNodeName,
-		Clientset:      k8s,
-		RetryInterval:  time.Second,
-	}
+func (srv service) Start(ctx xhdl.Context) {
 
 	// get our node to test the connection and validate the argument
-	node := apiGetNode(ctx, fNodeName)
-	klog.Infof("Node %s found\n", node.Name)
-
-	// check for delayed release
-	own := getNodeSet(ctx).OwnNode()
+	own := srv.getNodeSet(ctx).OwnNode()
+	klog.Infof("Node %s found\n", own.Name())
 
 	testpods := own.CriticalPods2(ctx)
 	_ = testpods
 
+	// check for delayed release
 	if own.GetLabel(ctx, labelDelayedRelease) == "true" {
 		klog.Infof("Node marked for delayed release, releasing lock now")
-		cmdRelease(ctx)
+		srv.Release(ctx)
 
 		own.SetLabel(ctx, labelDelayedRelease, "")
 	}
 }
 
-func getK8sConfig(ctx xhdl.Context) *rest.Config {
-	if fKubeConfig == "" {
-		fKubeConfig = os.Getenv("KUBECONFIG")
-	}
-
-	if fKubeConfig == "" {
-		klog.Infof("Using InClusterConfig\n")
-
-		k8sConfig, err := rest.InClusterConfig()
-		ctx.Throw(err)
-		return k8sConfig
-
-	} else {
-		klog.Infof("Using configfile %s\n", fKubeConfig)
-
-		k8sConfig, err := clientcmd.BuildConfigFromFlags("", fKubeConfig)
-		ctx.Throw(err)
-		return k8sConfig
-
-	}
-}
-
-func cmdVersion(w http.ResponseWriter, r *http.Request) {
-	io.WriteString(w, VERSION+"\n")
-}
-
-func cmdHealthz(w http.ResponseWriter, r *http.Request) {
-	io.WriteString(w, "OK\n")
-}
-
-func cmdSynchronize(ctx xhdl.Context) string {
+func (srv service) Synchronize(ctx xhdl.Context) string {
 
 	looper.Loop(ctx, time.Second*10, func(ctx xhdl.Context) (exit bool) {
-		return trySynchronize(ctx)
+		return srv.trySynchronize(ctx)
 	})
 
 	return "OK"
 }
 
-func cmdTeardown(ctx xhdl.Context) string {
+func (srv service) Teardown(ctx xhdl.Context) string {
 
-	ns := getNodeSet(ctx)
+	ns := srv.getNodeSet(ctx)
 	own := ns.OwnNode()
 
 	// condon
@@ -192,7 +101,7 @@ func cmdTeardown(ctx xhdl.Context) string {
 	// get pods with critical label
 	criticalPods := own.CriticalPods(ctx)
 	for _, pod := range criticalPods {
-		apiEvictPod(ctx, pod.Namespace, pod.Name)
+		srv.apiEvictPod(ctx, pod.Namespace, pod.Name)
 	}
 
 	// TODO: should loop until no critical pods found
@@ -200,9 +109,9 @@ func cmdTeardown(ctx xhdl.Context) string {
 	return "OK"
 }
 
-func cmdRelease(ctx xhdl.Context) string {
+func (srv service) Release(ctx xhdl.Context) string {
 
-	ns := getNodeSet(ctx)
+	ns := srv.getNodeSet(ctx)
 	own := ns.OwnNode()
 
 	// unset the label
@@ -217,9 +126,9 @@ func cmdRelease(ctx xhdl.Context) string {
 	return "OK"
 }
 
-func cmdReleaseDelayed(ctx xhdl.Context) string {
+func (srv service) ReleaseDelayed(ctx xhdl.Context) string {
 
-	ns := getNodeSet(ctx)
+	ns := srv.getNodeSet(ctx)
 	own := ns.OwnNode()
 
 	own.SetLabel(ctx, labelDelayedRelease, "true")
@@ -231,10 +140,10 @@ func getTSValue() string {
 	return fmt.Sprintf("%v", time.Now().Unix())
 }
 
-func apiEvictPod(ctx xhdl.Context, ns string, name string) {
+func (srv service) apiEvictPod(ctx xhdl.Context, ns string, name string) {
 	klog.Infof("Evict Pod %s/%s", ns, name)
 
-	err := k8s.PolicyV1().Evictions(ns).Evict(ctx, &policyv1.Eviction{
+	err := srv.K8s.PolicyV1().Evictions(ns).Evict(ctx, &policyv1.Eviction{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
@@ -256,17 +165,17 @@ func apiEvictPod(ctx xhdl.Context, ns string, name string) {
 }
 
 // trys sync one time, returns true if succesful
-func trySynchronize(ctx xhdl.Context) bool {
+func (srv service) trySynchronize(ctx xhdl.Context) bool {
 
 	klog.Info("try synchronize")
 
-	if !km.TryAcquire(ctx) {
+	if !srv.km.TryAcquire(ctx) {
 		return false
 	}
 
-	defer km.Release(ctx)
+	defer srv.km.Release(ctx)
 
-	ns := getNodeSet(ctx)
+	ns := srv.getNodeSet(ctx)
 	own := ns.OwnNode()
 
 	// check if we have the lock already
@@ -294,7 +203,7 @@ func (n Node) CriticalPods(ctx xhdl.Context) []v1.Pod {
 	listOpts := metav1.ListOptions{}
 	listOpts.LabelSelector = labelCriticalPod + "=true"
 
-	pods, err := k8s.CoreV1().Pods(metav1.NamespaceAll).List(ctx, listOpts)
+	pods, err := n.srv.K8s.CoreV1().Pods(metav1.NamespaceAll).List(ctx, listOpts)
 	ctx.Throw(err)
 
 	var lst []v1.Pod
@@ -319,19 +228,19 @@ func (n Node) CriticalPods2(ctx xhdl.Context) []v1.Pod {
 	listOpts := metav1.ListOptions{}
 	listOpts.FieldSelector = fmt.Sprintf("spec.nodeName=%s,status.phase=Running", n.Name())
 
-	pods, err := k8s.CoreV1().Pods(metav1.NamespaceAll).List(ctx, listOpts)
+	pods, err := n.srv.K8s.CoreV1().Pods(metav1.NamespaceAll).List(ctx, listOpts)
 	ctx.Throw(err)
 
 	var lst []v1.Pod
 	for _, pod := range pods.Items {
-		if isPodCritical(ctx, &pod) {
+		if n.srv.isPodCritical(ctx, &pod) {
 			lst = append(lst, pod)
 		}
 	}
 	return lst
 }
 
-func isPodCritical(ctx xhdl.Context, pod *v1.Pod) bool {
+func (srv service) isPodCritical(ctx xhdl.Context, pod *v1.Pod) bool {
 
 	// check if pod has the critical label explicitly set to true
 	if pod.Labels[labelCriticalPod] == "true" {
@@ -347,7 +256,7 @@ func isPodCritical(ctx xhdl.Context, pod *v1.Pod) bool {
 
 	// check if pod is part of a StatefulSet
 	for _, or := range pod.OwnerReferences {
-		if isCriticalOwner(ctx, or, pod) {
+		if srv.isCriticalOwner(ctx, or, pod) {
 			return true
 		}
 	}
@@ -355,7 +264,7 @@ func isPodCritical(ctx xhdl.Context, pod *v1.Pod) bool {
 	return false
 }
 
-func isCriticalOwner(ctx xhdl.Context, or metav1.OwnerReference, pod *v1.Pod) bool {
+func (srv service) isCriticalOwner(ctx xhdl.Context, or metav1.OwnerReference, pod *v1.Pod) bool {
 
 	// check StatefulSet
 	if or.APIVersion == appsv1.SchemeGroupVersion.Identifier() && or.Kind == "StatefulSet" {
@@ -367,7 +276,7 @@ func isCriticalOwner(ctx xhdl.Context, or metav1.OwnerReference, pod *v1.Pod) bo
 	if or.APIVersion == appsv1.SchemeGroupVersion.Identifier() && or.Kind == "ReplicaSet" {
 
 		// with only one replica
-		rs, err := k8s.AppsV1().ReplicaSets(pod.Namespace).Get(ctx, or.Name, metav1.GetOptions{})
+		rs, err := srv.K8s.AppsV1().ReplicaSets(pod.Namespace).Get(ctx, or.Name, metav1.GetOptions{})
 		ctx.Throw(err)
 
 		if rs.Status.Replicas == 1 {
@@ -381,40 +290,35 @@ func isCriticalOwner(ctx xhdl.Context, or metav1.OwnerReference, pod *v1.Pod) bo
 	return false
 }
 
-func apiGetNode(ctx xhdl.Context, hostname string) *v1.Node {
-	node, err := k8s.CoreV1().Nodes().Get(ctx, hostname, metav1.GetOptions{})
-	ctx.Throw(err)
-
-	return node
-}
-
 type NodeSet struct {
 	nodes []Node
+	srv   service
 }
 
 type Node struct {
 	node *v1.Node
+	srv  service
 }
 
 func (n Node) Name() string {
 	return n.node.Name
 }
 
-func getNodeSet(ctx xhdl.Context) NodeSet {
-	nodes, err := k8s.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+func (srv service) getNodeSet(ctx xhdl.Context) NodeSet {
+	nodes, err := srv.K8s.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	ctx.Throw(err)
 
 	var s []Node
 	for i := range nodes.Items {
 		np := &nodes.Items[i]
-		s = append(s, Node{np})
+		s = append(s, Node{np, srv})
 	}
 
-	return NodeSet{s}
+	return NodeSet{s, srv}
 }
 
 func (ns NodeSet) OwnNode() Node {
-	return ns.GetNode(fNodeName)
+	return ns.GetNode(ns.srv.NodeName)
 }
 
 func (ns NodeSet) GetNode(name string) Node {
@@ -437,7 +341,7 @@ func (n *Node) SetLabel(ctx xhdl.Context, name, value string) {
 	patch := fmt.Sprintf(`{"metadata":{"labels":{"%s":%s}}}`, name, valuestr)
 
 	nobj := n.node
-	nn, err := k8s.CoreV1().Nodes().Patch(ctx, nobj.Name, types.MergePatchType, []byte(patch), metav1.PatchOptions{})
+	nn, err := n.srv.K8s.CoreV1().Nodes().Patch(ctx, nobj.Name, types.MergePatchType, []byte(patch), metav1.PatchOptions{})
 	ctx.Throw(err)
 
 	n.node = nn
@@ -456,7 +360,7 @@ func (n *Node) Cordoned(ctx xhdl.Context, value bool) {
 	patch := fmt.Sprintf(`{"spec":{"unschedulable":%s}}`, valuestr)
 
 	nobj := n.node
-	nn, err := k8s.CoreV1().Nodes().Patch(ctx, nobj.Name, types.MergePatchType, []byte(patch), metav1.PatchOptions{})
+	nn, err := n.srv.K8s.CoreV1().Nodes().Patch(ctx, nobj.Name, types.MergePatchType, []byte(patch), metav1.PatchOptions{})
 	ctx.Throw(err)
 
 	n.node = nn

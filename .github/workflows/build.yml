@@ -40,7 +40,7 @@ jobs:
         with:
           images: ${{ vars.WD_HARBOR_REPOSITORY_NAME }}/suss
           tags: |
-            type=sha,format=long
+            type=sha
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
             type=semver,pattern={{version}}
 

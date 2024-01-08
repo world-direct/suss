@@ -16,7 +16,7 @@ COPY kmutex/ kmutex/
 COPY suss/ suss/
 
 # Build
-RUN CGO_ENABLED=0 go build -a -o suss .
+RUN CGO_ENABLED=0 go build -a -o ./out/suss .
 
 FROM builder AS chartbuilder
 WORKDIR /workspace
@@ -24,7 +24,7 @@ WORKDIR /workspace
 # We use an alpine image here, for distroless refer to: https://github.com/GoogleContainerTools/distroless for more details
 FROM alpine
 WORKDIR /
-COPY --from=builder /workspace/suss .
+COPY --from=builder /workspace/suss/out .
 USER 65532:65532
 
 ENTRYPOINT ["/suss"]

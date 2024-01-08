@@ -24,7 +24,7 @@ WORKDIR /workspace
 # We use an alpine image here, for distroless refer to: https://github.com/GoogleContainerTools/distroless for more details
 FROM alpine
 WORKDIR /
-COPY --from=builder /workspace/suss/out .
+COPY --from=builder /workspace/out/suss .
 USER 65532:65532
 
 ENTRYPOINT ["/suss"]

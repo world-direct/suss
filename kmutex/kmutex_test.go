@@ -137,3 +137,33 @@ func TestReleaseLockNotHeldShouldPanic(t *testing.T) {
 	})
 
 }
+
+func TestCurrentOwner(t *testing.T) {
+
+	cs := fake.NewSimpleClientset()
+
+	km := Kmutex{
+		LeaseName:                  "lease",
+		LeaseNamespace:             "default",
+		HolderIdentity:             "me",
+		DontCreateLeaseIfNotExists: false,
+		Clientset:                  cs,
+		RetryInterval:              time.Second,
+	}
+
+	err := xhdl.Run(func(ctx xhdl.Context) {
+
+		// owner should be "" if not owned
+		assert.Equal(t, "", km.CurrentOwner(ctx))
+
+		assert.True(t, km.TryAcquire(ctx))
+		assert.Equal(t, km.HolderIdentity, km.CurrentOwner(ctx))
+
+		km.Release(ctx)
+		assert.Equal(t, "", km.CurrentOwner(ctx))
+
+	})
+
+	assert.NoError(t, err)
+
+}

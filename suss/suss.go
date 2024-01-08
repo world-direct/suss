@@ -50,7 +50,6 @@ type CallContext interface {
 
 const (
 	labelPrefix         = "suss.world-direct.at/"
-	labelSync           = labelPrefix + "lockowner"
 	labelDelayedRelease = labelPrefix + "delayedrelease"
 	labelLastRelease    = labelPrefix + "lastrelease"
 	labelCriticalPod    = labelPrefix + "critical"
@@ -77,11 +76,11 @@ func (srv service) Start(ctx xhdl.Context) {
 
 	// get our node to test the connection and validate the argument
 	own := srv.getNodeSet(ctx).OwnNode()
-	infof(ctx, "Node %s found\n", own.Name())
+	infof(ctx, "node %s found\n", own.Name())
 
 	// check for delayed release
 	if own.GetLabel(ctx, labelDelayedRelease) == "true" {
-		infof(ctx, "Node marked for delayed release, releasing lock now")
+		infof(ctx, "node marked for delayed release, releasing lock now")
 		srv.Release(ctx)
 
 		own.SetLabel(ctx, labelDelayedRelease, "")
@@ -121,18 +120,24 @@ func (srv service) Teardown(ctx xhdl.Context) {
 
 func (srv service) Release(ctx xhdl.Context) {
 
+	// validate lock ownership
+	owner := srv.km.CurrentOwner(ctx)
+
+	if owner != srv.km.HolderIdentity {
+		ctx.Throw(fmt.Errorf("unable to release lock not held, owned by %s", owner))
+	}
+
+	// and release lock
+	srv.km.Release(ctx)
+	infof(ctx, "lock released")
+
+	// set lastRelease info label
 	ns := srv.getNodeSet(ctx)
 	own := ns.OwnNode()
-
-	// unset the label
-	infof(ctx, "Label released")
-	own.SetLabel(ctx, labelSync, "")
-
-	// write informative label for the user
 	own.SetLabel(ctx, labelLastRelease, getTSValue())
 
 	// uncordon
-	infof(ctx, "Node uncordoned")
+	infof(ctx, "node uncordoned")
 	own.Cordoned(ctx, false)
 
 }
@@ -174,36 +179,22 @@ func (srv service) apiEvictPod(ctx xhdl.Context, ns string, name string) {
 // trys sync one time, returns true if succesful
 func (srv service) trySynchronize(ctx xhdl.Context) bool {
 
-	infof(ctx, "try synchronize")
-
-	if !srv.km.TryAcquire(ctx) {
-		return false
-	}
-
-	defer srv.km.Release(ctx)
-
-	ns := srv.getNodeSet(ctx)
-	own := ns.OwnNode()
-
-	// check if we have the lock already
-	if own.GetLabel(ctx, labelSync) != "" {
-		infof(ctx, "Own Node %s already has the lock, done\n", own.Name())
+	// this is for information only to notify about existing owner
+	// if is not race-free if owned by another node (this is done in TryAcquire),
+	// but safe it owned by us
+	owner := srv.km.CurrentOwner(ctx)
+	if owner == srv.km.HolderIdentity {
+		infof(ctx, "lock already owned by us %s", owner)
 		return true
 	}
 
-	// check other nodes for the label
-	for _, n := range ns.nodes {
-		if n.GetLabel(ctx, labelSync) != "" {
-			infof(ctx, "Node %s has the lock, will wait\n", n.Name())
-			return false
-		}
+	if !srv.km.TryAcquire(ctx) {
+		infof(ctx, "could not aquire Lease, currently owned by %s", srv.km.CurrentOwner(ctx))
+		return false
+	} else {
+		infof(ctx, "lease successfully aquired by %s", srv.km.HolderIdentity)
+		return true
 	}
-
-	// set the label
-	own.SetLabel(ctx, labelSync, getTSValue())
-	infof(ctx, "Own Node %s succefully synchronized", own.Name())
-
-	return true
 }
 
 func (srv service) GetCriticalPods(ctx xhdl.Context) {

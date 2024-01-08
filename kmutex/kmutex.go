@@ -80,6 +80,21 @@ func (km Kmutex) withLease(ctx xhdl.Context, fn func(ctx xhdl.Context, lease *co
 	}
 }
 
+func (km Kmutex) CurrentOwner(ctx xhdl.Context) (owner string) {
+
+	km.withLease(ctx, func(ctx xhdl.Context, lease *coordinationv1.Lease) (retry bool) {
+		if lease.Spec.HolderIdentity == nil {
+			owner = ""
+		} else {
+			owner = *lease.Spec.HolderIdentity
+		}
+
+		return false
+	})
+
+	return
+}
+
 func (km Kmutex) TryAcquire(ctx xhdl.Context) bool {
 
 	return km.withLease(ctx, func(ctx xhdl.Context, lease *coordinationv1.Lease) (retry bool) {

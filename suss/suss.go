@@ -1,6 +1,7 @@
 package suss
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -20,9 +21,11 @@ import (
 )
 
 type SussOptions struct {
-	NodeName       string
-	LeaseNamespace string
-	K8s            kubernetes.Interface
+	NodeName                     string
+	LeaseNamespace               string
+	ConsiderStatefulSetCritical  bool
+	ConsiderSoleReplicasCritical bool
+	K8s                          kubernetes.Interface
 }
 
 type service struct {
@@ -32,10 +35,17 @@ type service struct {
 
 type Service interface {
 	Start(ctx xhdl.Context)
-	Synchronize(ctx xhdl.Context) string
-	Teardown(ctx xhdl.Context) string
-	Release(ctx xhdl.Context) string
-	ReleaseDelayed(ctx xhdl.Context) string
+	Synchronize(ctx xhdl.Context)
+	Teardown(ctx xhdl.Context)
+	Release(ctx xhdl.Context)
+	ReleaseDelayed(ctx xhdl.Context)
+	GetCriticalPods(ctx xhdl.Context)
+}
+
+type CallContext interface {
+
+	// Logs info to log and client-stream as text/plain & Transfer-Encoding: chunked
+	Infof(format string, args ...interface{})
 }
 
 const (
@@ -52,7 +62,7 @@ func NewService(options SussOptions) Service {
 	srv := service{
 		SussOptions: options,
 		km: kmutex.Kmutex{
-			LeaseName:      "sync",
+			LeaseName:      "sync", // if we may have multiple groups in the future we can use different names
 			LeaseNamespace: options.LeaseNamespace,
 			HolderIdentity: options.NodeName,
 			Clientset:      options.K8s,
@@ -67,30 +77,30 @@ func (srv service) Start(ctx xhdl.Context) {
 
 	// get our node to test the connection and validate the argument
 	own := srv.getNodeSet(ctx).OwnNode()
-	klog.Infof("Node %s found\n", own.Name())
-
-	testpods := own.CriticalPods2(ctx)
-	_ = testpods
+	infof(ctx, "Node %s found\n", own.Name())
 
 	// check for delayed release
 	if own.GetLabel(ctx, labelDelayedRelease) == "true" {
-		klog.Infof("Node marked for delayed release, releasing lock now")
+		infof(ctx, "Node marked for delayed release, releasing lock now")
 		srv.Release(ctx)
 
 		own.SetLabel(ctx, labelDelayedRelease, "")
 	}
 }
 
-func (srv service) Synchronize(ctx xhdl.Context) string {
+func infof(ctx context.Context, format string, args ...interface{}) {
+	klog.FromContext(ctx).Info(fmt.Sprintf(format, args...))
+}
+
+func (srv service) Synchronize(ctx xhdl.Context) {
 
 	looper.Loop(ctx, time.Second*10, func(ctx xhdl.Context) (exit bool) {
 		return srv.trySynchronize(ctx)
 	})
 
-	return "OK"
 }
 
-func (srv service) Teardown(ctx xhdl.Context) string {
+func (srv service) Teardown(ctx xhdl.Context) {
 
 	ns := srv.getNodeSet(ctx)
 	own := ns.OwnNode()
@@ -101,39 +111,39 @@ func (srv service) Teardown(ctx xhdl.Context) string {
 	// get pods with critical label
 	criticalPods := own.CriticalPods(ctx)
 	for _, pod := range criticalPods {
+		infof(ctx, "Evict Pod %s/%s", pod.Namespace, pod.Name)
 		srv.apiEvictPod(ctx, pod.Namespace, pod.Name)
 	}
 
 	// TODO: should loop until no critical pods found
 
-	return "OK"
 }
 
-func (srv service) Release(ctx xhdl.Context) string {
+func (srv service) Release(ctx xhdl.Context) {
 
 	ns := srv.getNodeSet(ctx)
 	own := ns.OwnNode()
 
 	// unset the label
+	infof(ctx, "Label released")
 	own.SetLabel(ctx, labelSync, "")
 
 	// write informative label for the user
 	own.SetLabel(ctx, labelLastRelease, getTSValue())
 
 	// uncordon
+	infof(ctx, "Node uncordoned")
 	own.Cordoned(ctx, false)
 
-	return "OK"
 }
 
-func (srv service) ReleaseDelayed(ctx xhdl.Context) string {
+func (srv service) ReleaseDelayed(ctx xhdl.Context) {
 
 	ns := srv.getNodeSet(ctx)
 	own := ns.OwnNode()
 
 	own.SetLabel(ctx, labelDelayedRelease, "true")
 
-	return "OK"
 }
 
 func getTSValue() string {
@@ -141,7 +151,6 @@ func getTSValue() string {
 }
 
 func (srv service) apiEvictPod(ctx xhdl.Context, ns string, name string) {
-	klog.Infof("Evict Pod %s/%s", ns, name)
 
 	err := srv.K8s.PolicyV1().Evictions(ns).Evict(ctx, &policyv1.Eviction{
 		ObjectMeta: metav1.ObjectMeta{
@@ -151,7 +160,7 @@ func (srv service) apiEvictPod(ctx xhdl.Context, ns string, name string) {
 	})
 
 	if errors.IsNotFound(err) {
-		klog.Infof("Evict failed with NotFound, Pod aready gone %s/%s", ns, name)
+		infof(ctx, "Evict failed with NotFound, Pod aready gone %s/%s", ns, name)
 		return
 	}
 
@@ -160,14 +169,12 @@ func (srv service) apiEvictPod(ctx xhdl.Context, ns string, name string) {
 	// need special pods like some that will need more time to terminate
 	ctx.Throw(err)
 
-	// k8s.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
-	klog.Infof("Pod %s/%s evicted", ns, name)
 }
 
 // trys sync one time, returns true if succesful
 func (srv service) trySynchronize(ctx xhdl.Context) bool {
 
-	klog.Info("try synchronize")
+	infof(ctx, "try synchronize")
 
 	if !srv.km.TryAcquire(ctx) {
 		return false
@@ -180,51 +187,32 @@ func (srv service) trySynchronize(ctx xhdl.Context) bool {
 
 	// check if we have the lock already
 	if own.GetLabel(ctx, labelSync) != "" {
-		klog.Infof("Own Node %s already has the lock, done\n", own.Name())
+		infof(ctx, "Own Node %s already has the lock, done\n", own.Name())
 		return true
 	}
 
 	// check other nodes for the label
 	for _, n := range ns.nodes {
 		if n.GetLabel(ctx, labelSync) != "" {
-			klog.Infof("Node %s has the lock, will wait\n", n.Name())
+			infof(ctx, "Node %s has the lock, will wait\n", n.Name())
 			return false
 		}
 	}
 
 	// set the label
 	own.SetLabel(ctx, labelSync, getTSValue())
-	klog.Infof("Own Node %s succefully synchronized", own.Name())
+	infof(ctx, "Own Node %s succefully synchronized", own.Name())
 
 	return true
 }
 
-func (n Node) CriticalPods(ctx xhdl.Context) []v1.Pod {
-	listOpts := metav1.ListOptions{}
-	listOpts.LabelSelector = labelCriticalPod + "=true"
+func (srv service) GetCriticalPods(ctx xhdl.Context) {
 
-	pods, err := n.srv.K8s.CoreV1().Pods(metav1.NamespaceAll).List(ctx, listOpts)
-	ctx.Throw(err)
-
-	var lst []v1.Pod
-
-	// check the pods for the node
-	for _, pod := range pods.Items {
-		if pod.Spec.NodeName != n.Name() {
-			continue
-		}
-
-		if pod.Status.Phase != v1.PodRunning {
-			continue
-		}
-
-		lst = append(lst, pod)
-	}
-
-	return lst
+	// .CriticalPods logs with cc, so we do not need to return something
+	srv.getNodeSet(ctx).OwnNode().CriticalPods(ctx)
 }
 
-func (n Node) CriticalPods2(ctx xhdl.Context) []v1.Pod {
+func (n Node) CriticalPods(ctx xhdl.Context) []v1.Pod {
 	listOpts := metav1.ListOptions{}
 	listOpts.FieldSelector = fmt.Sprintf("spec.nodeName=%s,status.phase=Running", n.Name())
 
@@ -244,17 +232,17 @@ func (srv service) isPodCritical(ctx xhdl.Context, pod *v1.Pod) bool {
 
 	// check if pod has the critical label explicitly set to true
 	if pod.Labels[labelCriticalPod] == "true" {
-		klog.Infof("Pod %s/%s is critical %s", pod.Namespace, pod.Name, labelCriticalPod)
+		infof(ctx, "Pod %s/%s is critical %s", pod.Namespace, pod.Name, labelCriticalPod)
 		return true
 	}
 
 	// check if pod has the critical label explicitly set to false
 	if pod.Labels[labelCriticalPod] == "false" {
-		klog.Infof("Pod %s/%s is explicitly not critical", pod.Namespace, pod.Name)
+		infof(ctx, "Pod %s/%s is explicitly not critical", pod.Namespace, pod.Name)
 		return true
 	}
 
-	// check if pod is part of a StatefulSet
+	// check if pod has critical owner
 	for _, or := range pod.OwnerReferences {
 		if srv.isCriticalOwner(ctx, or, pod) {
 			return true
@@ -267,20 +255,20 @@ func (srv service) isPodCritical(ctx xhdl.Context, pod *v1.Pod) bool {
 func (srv service) isCriticalOwner(ctx xhdl.Context, or metav1.OwnerReference, pod *v1.Pod) bool {
 
 	// check StatefulSet
-	if or.APIVersion == appsv1.SchemeGroupVersion.Identifier() && or.Kind == "StatefulSet" {
-		klog.Infof("Pod %s/%s is critical (Statefulset)", pod.Namespace, pod.Name)
+	if srv.ConsiderStatefulSetCritical && or.APIVersion == appsv1.SchemeGroupVersion.Identifier() && or.Kind == "StatefulSet" {
+		infof(ctx, "Pod %s/%s is critical (Statefulset)", pod.Namespace, pod.Name)
 		return true
 	}
 
 	// check ReplicaSet (for Deployments)
-	if or.APIVersion == appsv1.SchemeGroupVersion.Identifier() && or.Kind == "ReplicaSet" {
+	if srv.ConsiderSoleReplicasCritical && or.APIVersion == appsv1.SchemeGroupVersion.Identifier() && or.Kind == "ReplicaSet" {
 
 		// with only one replica
 		rs, err := srv.K8s.AppsV1().ReplicaSets(pod.Namespace).Get(ctx, or.Name, metav1.GetOptions{})
 		ctx.Throw(err)
 
 		if rs.Status.Replicas == 1 {
-			klog.Infof("Pod %s/%s is critical (only one replica)", pod.Namespace, pod.Name)
+			infof(ctx, "Pod %s/%s is critical (only one replica)", pod.Namespace, pod.Name)
 			return true
 		} else {
 			return false

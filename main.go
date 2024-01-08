@@ -43,24 +43,31 @@ func main() {
 	http.HandleFunc("/version", cmdVersion)
 	http.HandleFunc("/healthz", cmdHealthz)
 
-	registerCommand("synchronize", cmdSynchronize)
-	registerCommand("teardown", cmdTeardown)
-	registerCommand("release", cmdRelease)
-	registerCommand("releasedelayed", cmdReleaseDelayed)
+	registerCommand("synchronize", func(ctx xhdl.Context) { service.Synchronize(ctx) })
+	registerCommand("teardown", func(ctx xhdl.Context) { service.Teardown(ctx) })
+	registerCommand("release", func(ctx xhdl.Context) { service.Release(ctx) })
+	registerCommand("releasedelayed", func(ctx xhdl.Context) { service.ReleaseDelayed(ctx) })
+	registerCommand("criticalpods", func(ctx xhdl.Context) { service.GetCriticalPods(ctx) })
 
 	klog.Infof("listen on %s\n", fBindAddress)
 	http.ListenAndServe(fBindAddress, nil)
 }
 
-func registerCommand(name string, fn func(ctx xhdl.Context) string) {
+func registerCommand(name string, fn func(ctx xhdl.Context)) {
 	http.HandleFunc("/"+name, func(w http.ResponseWriter, r *http.Request) {
 
 		klog.Infof("/%s\n", name)
 
-		err := xhdl.RunContext(r.Context(), func(ctx xhdl.Context) {
-			response := fn(ctx)
-			io.WriteString(w, response)
-			io.WriteString(w, "\n")
+		// setup own logger to context so that log messages can be
+		// written to the client
+		defaultlog := klog.FromContext(r.Context())
+		sink := defaultlog.GetSink()
+		ctxlog := defaultlog.WithSink(rwsink{sink, w})
+
+		myctx := klog.NewContext(r.Context(), ctxlog)
+
+		err := xhdl.RunContext(myctx, func(ctx xhdl.Context) {
+			fn(ctx)
 		})
 
 		if err != nil {
@@ -99,9 +106,11 @@ func initService(ctx xhdl.Context) {
 
 	// init options
 	opt := suss.SussOptions{
-		NodeName:       fNodeName,
-		LeaseNamespace: fLeaseNamespace,
-		K8s:            k8s,
+		NodeName:                     fNodeName,
+		LeaseNamespace:               fLeaseNamespace,
+		K8s:                          k8s,
+		ConsiderStatefulSetCritical:  true,
+		ConsiderSoleReplicasCritical: false,
 	}
 
 	// and create service
@@ -139,20 +148,4 @@ func cmdVersion(w http.ResponseWriter, r *http.Request) {
 
 func cmdHealthz(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "OK\n")
-}
-
-func cmdSynchronize(ctx xhdl.Context) string {
-	return service.Release(ctx)
-}
-
-func cmdTeardown(ctx xhdl.Context) string {
-	return service.Teardown(ctx)
-}
-
-func cmdRelease(ctx xhdl.Context) string {
-	return service.Release(ctx)
-}
-
-func cmdReleaseDelayed(ctx xhdl.Context) string {
-	return service.ReleaseDelayed(ctx)
 }

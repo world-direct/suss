@@ -40,4 +40,4 @@ fi
 suss releasedelayed
 
 # and finally reboot
-reboot
+shutdown -t 1 -r

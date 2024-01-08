@@ -24,7 +24,7 @@ func (srv service) apiEvictPod(ctx xhdl.Context, ns string, name string) {
 	})
 
 	if errors.IsNotFound(err) {
-		infof(ctx, "Evict failed with NotFound, Pod aready gone %s/%s", ns, name)
+		infof(ctx, "evict failed with NotFound, pod already gone %s/%s", ns, name)
 		return
 	}
 
@@ -85,13 +85,13 @@ func (srv service) isPodCritical(ctx xhdl.Context, pod *v1.Pod) bool {
 
 	// check if pod has the critical label explicitly set to true
 	if pod.Labels[labelCriticalPod] == "true" {
-		infof(ctx, "Pod %s/%s is critical %s", pod.Namespace, pod.Name, labelCriticalPod)
+		infof(ctx, "pod %s/%s is critical by label %s", pod.Namespace, pod.Name, labelCriticalPod)
 		return true
 	}
 
 	// check if pod has the critical label explicitly set to false
 	if pod.Labels[labelCriticalPod] == "false" {
-		infof(ctx, "Pod %s/%s is explicitly not critical", pod.Namespace, pod.Name)
+		infof(ctx, "pod %s/%s is not critical by label %s", pod.Namespace, pod.Name, labelCriticalPod)
 		return true
 	}
 
@@ -109,19 +109,19 @@ func (srv service) isCriticalOwner(ctx xhdl.Context, or metav1.OwnerReference, p
 
 	// check StatefulSet
 	if srv.ConsiderStatefulSetCritical && or.APIVersion == appsv1.SchemeGroupVersion.Identifier() && or.Kind == "StatefulSet" {
-		infof(ctx, "Pod %s/%s is critical (Statefulset)", pod.Namespace, pod.Name)
+		infof(ctx, "pod %s/%s is critical (Statefulset)", pod.Namespace, pod.Name)
 		return true
 	}
 
 	// check ReplicaSet (for Deployments)
 	if srv.ConsiderSoleReplicasCritical && or.APIVersion == appsv1.SchemeGroupVersion.Identifier() && or.Kind == "ReplicaSet" {
 
-		// with only one replica
+		// with sole replica
 		rs, err := srv.K8s.AppsV1().ReplicaSets(pod.Namespace).Get(ctx, or.Name, metav1.GetOptions{})
 		ctx.Throw(err)
 
 		if rs.Status.Replicas == 1 {
-			infof(ctx, "Pod %s/%s is critical (only one replica)", pod.Namespace, pod.Name)
+			infof(ctx, "pod %s/%s is critical (sole replica)", pod.Namespace, pod.Name)
 			return true
 		} else {
 			return false

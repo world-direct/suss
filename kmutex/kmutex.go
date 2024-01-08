@@ -34,7 +34,7 @@ func (km Kmutex) withLease(ctx xhdl.Context, fn func(ctx xhdl.Context, lease *co
 			}
 
 			if errors.IsNotFound(err) {
-				klog.Infof("Lease %v/%v not found, creating", km.LeaseNamespace, km.LeaseName)
+				klog.Infof("lease %v/%v not found, creating", km.LeaseNamespace, km.LeaseName)
 
 				// the fake.NewSimpleClientset() doesn't create a new instance, like the
 				// real kubernetes.Clientset, so we create it here if it is nil to

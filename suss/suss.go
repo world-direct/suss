@@ -100,13 +100,13 @@ func (srv service) Teardown(ctx xhdl.Context) {
 
 	// condon
 	own.Cordoned(ctx, true)
-	infof(ctx, "Node %s cordoned", own.Name())
+	infof(ctx, "node %s cordoned", own.Name())
 
 	// get pods with critical label
 	criticalPods := own.CriticalPods(ctx)
 	for _, pod := range criticalPods {
 
-		infof(ctx, "Evict Pod %s/%s", pod.Namespace, pod.Name)
+		infof(ctx, "evict pod %s/%s", pod.Namespace, pod.Name)
 
 		// label as evicted so we don't evict again
 		srv.apiLabelPod(ctx, &pod, labelPodEvicted, getTSValue())

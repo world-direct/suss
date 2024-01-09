@@ -30,7 +30,7 @@ yum update -y
 
 # check if reboot is requred
 needs-restarting -r
-if [[ "$?" == "130" ]]; then
+if [[ "$?" == "0" ]]; then
     echo "No reboot required, releasing lock"
     suss release
     exit 0

@@ -102,7 +102,7 @@ func initService(ctx xhdl.Context) {
 		}
 	}
 
-	klog.Infof("Using namespace %s for the Lease", fLeaseNamespace)
+	klog.Infof("using namespace %s for the Lease", fLeaseNamespace)
 
 	// init options
 	opt := suss.SussOptions{
@@ -126,14 +126,14 @@ func getK8sConfig(ctx xhdl.Context) *rest.Config {
 	}
 
 	if fKubeConfig == "" {
-		klog.Infof("Using InClusterConfig\n")
+		klog.Infof("using InClusterConfig\n")
 
 		k8sConfig, err := rest.InClusterConfig()
 		ctx.Throw(err)
 		return k8sConfig
 
 	} else {
-		klog.Infof("Using configfile %s\n", fKubeConfig)
+		klog.Infof("using configfile %s\n", fKubeConfig)
 
 		k8sConfig, err := clientcmd.BuildConfigFromFlags("", fKubeConfig)
 		ctx.Throw(err)

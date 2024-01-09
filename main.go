@@ -30,10 +30,10 @@ var (
 func main() {
 	flag.StringVar(&fBindAddress, "bindAddress", "localhost:9993", "address to bind http socket")
 	flag.StringVar(&fKubeConfig, "kubeconfig", "", "kubeconfig to use, if not set InClusterConfig is used, can be set by KUBECONFIG envvar")
-	flag.StringVar(&fNodeName, "nodename", "", "the name of the node running the service. Can be set by NODE_NAME envvar")
+	flag.StringVar(&fNodeName, "nodename", "", "the name of the node running the service. Can be set by NODENAME envvar")
 	flag.StringVar(&fLeaseNamespace, "leasenamespace", "", "the namespace for the lease, can be set by the NAMESPACE envvar")
-	flag.BoolVar(&fConsiderStatefulSetCritical, "considerStatefulSetCritical", false, "All pods part of a statefulset are critical")
-	flag.BoolVar(&fConsiderSoleReplicasCritical, "considerSoleReplicasCritical", false, "All pods part of a replicaset with only one replica are critical")
+	flag.BoolVar(&fConsiderStatefulSetCritical, "considerStatefulSetCritical", false, "all pods part of a statefulset are critical")
+	flag.BoolVar(&fConsiderSoleReplicasCritical, "considerSoleReplicasCritical", false, "all pods part of a replicaset with only one replica are critical")
 
 	// klog.InitFlags(flag.CommandLine)
 	flag.Parse()
@@ -69,7 +69,6 @@ func registerCommand(name string, fn func(ctx xhdl.Context)) {
 		ctxlog := defaultlog.WithSink(rwsink{sink, w})
 
 		myctx := klog.NewContext(r.Context(), ctxlog)
-
 		err := xhdl.RunContext(myctx, func(ctx xhdl.Context) {
 			fn(ctx)
 		})

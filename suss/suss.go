@@ -75,35 +75,33 @@ func (srv service) Start(ctx xhdl.Context) {
 	}
 }
 
+// infof is a helper to log to klog and http response
 func infof(ctx context.Context, format string, args ...interface{}) {
 	klog.FromContext(ctx).Info(fmt.Sprintf(format, args...))
 }
 
 func (srv service) Synchronize(ctx xhdl.Context) {
 	looper.Loop(ctx, time.Second*10, func(ctx xhdl.Context) (exit bool) {
-		return srv.trySynchronize(ctx)
+		return func() bool {
+
+			// this is for information only to notify about existing owner
+			// if is not race-free if owned by another node (this is done in TryAcquire),
+			// but safe it owned by us
+			owner := srv.km.CurrentOwner(ctx)
+			if owner == srv.km.HolderIdentity {
+				infof(ctx, "lock already owned by us %s", owner)
+				return true
+			}
+
+			if !srv.km.TryAcquire(ctx) {
+				infof(ctx, "could not aquire Lease, currently owned by %s", srv.km.CurrentOwner(ctx))
+				return false
+			} else {
+				infof(ctx, "lease successfully aquired by %s", srv.km.HolderIdentity)
+				return true
+			}
+		}()
 	})
-}
-
-// trys sync one time, returns true if succesful
-func (srv service) trySynchronize(ctx xhdl.Context) bool {
-
-	// this is for information only to notify about existing owner
-	// if is not race-free if owned by another node (this is done in TryAcquire),
-	// but safe it owned by us
-	owner := srv.km.CurrentOwner(ctx)
-	if owner == srv.km.HolderIdentity {
-		infof(ctx, "lock already owned by us %s", owner)
-		return true
-	}
-
-	if !srv.km.TryAcquire(ctx) {
-		infof(ctx, "could not aquire Lease, currently owned by %s", srv.km.CurrentOwner(ctx))
-		return false
-	} else {
-		infof(ctx, "lease successfully aquired by %s", srv.km.HolderIdentity)
-		return true
-	}
 }
 
 func (srv service) Teardown(ctx xhdl.Context) {
@@ -152,21 +150,24 @@ func (srv service) Teardown(ctx xhdl.Context) {
 
 func (srv service) Release(ctx xhdl.Context) {
 
+	ns := srv.getNodeSet(ctx)
+	own := ns.OwnNode()
+
 	// validate lock ownership
 	owner := srv.km.CurrentOwner(ctx)
 
+	// we continue even if lock not held to ensure uncordoned
+	// node after release
 	if owner != srv.km.HolderIdentity {
-		ctx.Throw(fmt.Errorf("unable to release lock not held, owned by %s", owner))
+		infof(ctx, "lock is currently not held!")
+	} else {
+		// release lock
+		srv.km.Release(ctx)
+		infof(ctx, "lock released")
+
+		// set lastRelease info label
+		own.SetLabel(ctx, labelLastRelease, getTSValue())
 	}
-
-	// and release lock
-	srv.km.Release(ctx)
-	infof(ctx, "lock released")
-
-	// set lastRelease info label
-	ns := srv.getNodeSet(ctx)
-	own := ns.OwnNode()
-	own.SetLabel(ctx, labelLastRelease, getTSValue())
 
 	// uncordon
 	infof(ctx, "node uncordoned")
@@ -178,9 +179,11 @@ func (srv service) ReleaseDelayed(ctx xhdl.Context) {
 	ns := srv.getNodeSet(ctx)
 	own := ns.OwnNode()
 
+	infof(ctx, "set label %s node for delayed release", labelDelayedRelease)
 	own.SetLabel(ctx, labelDelayedRelease, "true")
 }
 
+// getTSValue returns a timestamp based value for labels
 func getTSValue() string {
 	return fmt.Sprintf("%v", time.Now().Unix())
 }

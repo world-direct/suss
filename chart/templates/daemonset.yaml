@@ -27,6 +27,8 @@ spec:
                   apiVersion: v1
                   fieldPath: metadata.namespace
           image: r.world-direct.at/library/suss:latest
+          args:
+            - -considerStatefulSetCritical
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3

@@ -17,10 +17,12 @@ import (
 )
 
 var (
-	fBindAddress    string
-	fKubeConfig     string
-	fNodeName       string
-	fLeaseNamespace string
+	fBindAddress                  string
+	fKubeConfig                   string
+	fNodeName                     string
+	fLeaseNamespace               string
+	fConsiderSoleReplicasCritical bool
+	fConsiderStatefulSetCritical  bool
 
 	service suss.Service
 )
@@ -30,6 +32,8 @@ func main() {
 	flag.StringVar(&fKubeConfig, "kubeconfig", "", "kubeconfig to use, if not set InClusterConfig is used, can be set by KUBECONFIG envvar")
 	flag.StringVar(&fNodeName, "nodename", "", "the name of the node running the service. Can be set by NODE_NAME envvar")
 	flag.StringVar(&fLeaseNamespace, "leasenamespace", "", "the namespace for the lease, can be set by the NAMESPACE envvar")
+	flag.BoolVar(&fConsiderStatefulSetCritical, "considerStatefulSetCritical", false, "All pods part of a statefulset are critical")
+	flag.BoolVar(&fConsiderSoleReplicasCritical, "considerSoleReplicasCritical", false, "All pods part of a replicaset with only one replica are critical")
 
 	// klog.InitFlags(flag.CommandLine)
 	flag.Parse()
@@ -109,8 +113,8 @@ func initService(ctx xhdl.Context) {
 		NodeName:                     fNodeName,
 		LeaseNamespace:               fLeaseNamespace,
 		K8s:                          k8s,
-		ConsiderStatefulSetCritical:  true,
-		ConsiderSoleReplicasCritical: false,
+		ConsiderStatefulSetCritical:  fConsiderStatefulSetCritical,
+		ConsiderSoleReplicasCritical: fConsiderSoleReplicasCritical,
 	}
 
 	// and create service

@@ -46,6 +46,7 @@ func main() {
 
 	http.HandleFunc("/version", cmdVersion)
 	http.HandleFunc("/healthz", cmdHealthz)
+	http.HandleFunc("/logstream", cmdLogStream)
 
 	registerCommand("synchronize", func(ctx xhdl.Context) { service.Synchronize(ctx) })
 	registerCommand("teardown", func(ctx xhdl.Context) { service.Teardown(ctx) })
@@ -55,7 +56,12 @@ func main() {
 	registerCommand("testfail", func(ctx xhdl.Context) { service.TestFail(ctx) })
 
 	klog.Infof("listen on %s\n", fBindAddress)
-	http.ListenAndServe(fBindAddress, nil)
+	err = http.ListenAndServe(fBindAddress, nil)
+
+	if err != nil {
+		klog.Error(err)
+		os.Exit(1)
+	}
 }
 
 func registerCommand(name string, fn func(ctx xhdl.Context)) {
@@ -67,12 +73,11 @@ func registerCommand(name string, fn func(ctx xhdl.Context)) {
 		// written to the client
 		defaultlog := klog.FromContext(r.Context())
 		sink := defaultlog.GetSink()
-		ctxlog := defaultlog.WithSink(rwsink{sink, w})
+		ctxlog := defaultlog.WithSink(rwsink{sink})
 
 		myctx := klog.NewContext(r.Context(), ctxlog)
 		err := xhdl.RunContext(myctx, func(ctx xhdl.Context) {
 			fn(ctx)
-			io.WriteString(w, "OK\n")
 		})
 
 		if err != nil {
@@ -155,4 +160,13 @@ func cmdVersion(w http.ResponseWriter, r *http.Request) {
 
 func cmdHealthz(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "OK\n")
+}
+
+func cmdLogStream(w http.ResponseWriter, r *http.Request) {
+	registerLogWriter(w)
+
+	// this sleeps until client cancels
+	<-r.Context().Done()
+
+	unregisterLogWriter(w)
 }

@@ -26,6 +26,10 @@ if [[ "$rc" != "0" ]]; then
     exit 1
 fi
 
+# start logstream, will be killed by trap
+trap 'pkill -P $$' SIGINT SIGTERM EXIT
+curl localhost:9993/logstream & log_pid=$!
+
 # synchronize with other hosts
 suss synchronize
 

@@ -33,9 +33,9 @@ like `curl localhost:9993/version`.
 * Commands are implemented to be cancelable and resumable at any time.
 * Commands never timeout internally, it's up to the script if needed
 * Commands return HTTP 200 if successful
-* Commands use text/plain responses, and Transfer-Encoding: chunked to stream
-logs back to the client. This allows the user to check status and progress manually.
-Currently there is no machine-readable response data provided.
+* Commands will not return any data. To check the ongoing operation check the log,
+or use the `/logstream` endpoint which uses `Tranfer-Encoding: chunked` with all 
+logs from the commands. See [./update-example.sh](update-example.sh) for usage.
 
 ### /synchronize
 
@@ -77,6 +77,17 @@ present. And it so, it executes the `/release` command internally, so so releasi
 the Lease.
 
 This ensures successful restart of the host, and an operative kubernetes node.
+
+## Endpoints
+
+This endpoints are available which are not commands:
+
+### /logstream
+
+This command uses `Content-Type: text/plain` and `Transfer-Encoding: chunked` and
+will return all log messages in real time. The server will never complete this 
+request. It's up to the client to cancel it when no longer needed. Normally when 
+the script is done.
 
 ### /version
 

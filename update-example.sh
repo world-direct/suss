@@ -1,11 +1,13 @@
 #/bin/sh
 
-set -ux
+set -u
 # we don't use -e (fail on error here, because we need to handle explicit exit codes)
+
+SUSS_URL=http://localhost:9993
 
 function suss {  
     echo "SUSS: $1"
-    curl --fail "http://localhost:9993/$1"
+    curl --fail "$SUSS_URL/$1"
 
     if [[ "$?" != "0" ]]; then
         echo "SUSS call failed, stop script execution"
@@ -27,8 +29,8 @@ if [[ "$rc" != "0" ]]; then
 fi
 
 # start logstream, will be killed by trap
-trap 'pkill -P $$' SIGINT SIGTERM EXIT
-curl localhost:9993/logstream & log_pid=$!
+trap 'echo "stopping logstream";kill $log_pid' SIGINT SIGTERM EXIT
+curl $SUSS_URL/logstream & log_pid=$!
 
 # synchronize with other hosts
 suss synchronize

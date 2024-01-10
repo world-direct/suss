@@ -22,6 +22,8 @@ Because SUSS is to be called with http from a script running directly on the hos
 the SUSS pod uses host networking. This allows it to be called by `curl localhost:9993`.
 The port 9993 is the default port and can be changed by arguments.
 
+There is an example of an update script here: [./update-example.sh](update-example.sh)
+
 ## Commands
 
 SUSS implements the following commands that are supposed to be called from the 

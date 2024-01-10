@@ -15,6 +15,14 @@ spec:
       serviceAccountName: suss
       containers:
         - name: suss
+          image: {{.Values.image.name}}:{{.Values.image.tag}}
+          args: 
+{{- if .Values.criticalPods.considerStatefulSetCritical }}
+          - -considerStatefulSetCritical
+{{- end }}
+{{- if .Values.criticalPods.considerSoleReplicasCritical }}
+          - -considerSoleReplicasCritical
+{{- end }}
           env:
             - name: NODENAME
               valueFrom:
@@ -26,9 +34,6 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: metadata.namespace
-          image: r.world-direct.at/library/suss:latest
-          args:
-            - -considerStatefulSetCritical
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3

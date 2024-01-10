@@ -1,0 +1,6 @@
+image:
+  name: r.world-direct.at/library/suss
+  tag: latest
+criticalPods:
+  considerStatefulSetCritical: true
+  considerSoleReplicasCritical: false

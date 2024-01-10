@@ -1,9 +1,7 @@
 package main
 
 import (
-	"io"
 	"net/http"
-	"strings"
 
 	"k8s.io/klog/v2"
 )
@@ -26,16 +24,16 @@ func (s rwsink) Info(level int, msg string, keysAndValues ...any) {
 
 	// format message
 	// msgf := fmt.Sprintf(msg, keysAndValues...)
-	if !strings.HasSuffix(msg, "\n") {
-		msg += "\n"
-	}
+	// if !strings.HasSuffix(msg, "\n") {
+	// 	msg += "\n"
+	// }
 
 	// and log to response-stream incl flush
 	// to make client aware of the progress
-	io.WriteString(s.w, msg)
-	if f, ok := s.w.(http.Flusher); ok {
-		f.Flush()
-	}
+	// io.WriteString(s.w, msg)
+	// if f, ok := s.w.(http.Flusher); ok {
+	// 	f.Flush()
+	// }
 
 }
 func (s rwsink) Error(err error, msg string, keysAndValues ...any) {

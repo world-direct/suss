@@ -52,6 +52,7 @@ func main() {
 	registerCommand("release", func(ctx xhdl.Context) { service.Release(ctx) })
 	registerCommand("releasedelayed", func(ctx xhdl.Context) { service.ReleaseDelayed(ctx) })
 	registerCommand("criticalpods", func(ctx xhdl.Context) { service.GetCriticalPods(ctx) })
+	registerCommand("testfail", func(ctx xhdl.Context) { service.TestFail(ctx) })
 
 	klog.Infof("listen on %s\n", fBindAddress)
 	http.ListenAndServe(fBindAddress, nil)
@@ -71,12 +72,15 @@ func registerCommand(name string, fn func(ctx xhdl.Context)) {
 		myctx := klog.NewContext(r.Context(), ctxlog)
 		err := xhdl.RunContext(myctx, func(ctx xhdl.Context) {
 			fn(ctx)
+			io.WriteString(w, "OK\n")
 		})
 
 		if err != nil {
 			klog.Error(err.Error())
-			io.WriteString(w, err.Error())
+
 			w.WriteHeader(500)
+			io.WriteString(w, err.Error())
+
 		}
 	})
 }

@@ -33,6 +33,7 @@ type Service interface {
 	Release(ctx xhdl.Context)
 	ReleaseDelayed(ctx xhdl.Context)
 	GetCriticalPods(ctx xhdl.Context)
+	TestFail(ctx xhdl.Context)
 }
 
 const (
@@ -186,4 +187,14 @@ func (srv service) ReleaseDelayed(ctx xhdl.Context) {
 // getTSValue returns a timestamp based value for labels
 func getTSValue() string {
 	return fmt.Sprintf("%v", time.Now().Unix())
+}
+
+func (srv service) TestFail(ctx xhdl.Context) {
+	for i := 0; i < 5; i++ {
+		infof(ctx, "loop %d/%d (%v)", i+1, 5, time.Now())
+		time.Sleep(time.Second)
+	}
+
+	infof(ctx, "failing now")
+	ctx.Throw(fmt.Errorf("this fails"))
 }

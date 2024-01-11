@@ -3,6 +3,9 @@
 set -u
 # we don't use -e (fail on error here, because we need to handle explicit exit codes)
 
+# alias yum for CENTOS-7
+command -v dnf > /dev/null || alias dnf="yum"
+
 SUSS_URL=http://localhost:9993
 
 function suss {  
@@ -19,11 +22,11 @@ function suss {
 # https://dnf.readthedocs.io/en/latest/command_ref.html#check-update-command
 dnf check-update
 rc=$?
-if [[ "$rc" != "100" ]]; then
+if [[ "$rc" == "0" ]]; then
     echo "No package updates available, exiting"
     exit 0
 fi
-if [[ "$rc" != "0" ]]; then
+if [[ "$rc" != "100" ]]; then
     echo "dnf check-update exited with code $rc, exiting"
     exit 1
 fi
@@ -50,7 +53,7 @@ fi
 
 # check if reboot is requred
 # https://dnf-plugins-core.readthedocs.io/en/latest/needs_restarting.html
-dnf needs-restarting -r
+needs-restarting -r
 rc=$?
 if [[ "$rc" == "0" ]]; then
     echo "No reboot required, releasing lock"

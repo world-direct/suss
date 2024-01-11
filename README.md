@@ -16,7 +16,10 @@ script is started at the same schedule on all hosts
 ## Installation
 
 There is a helm chart contained within the repo at `/chart` that deploys a DaemonSet
-in the cluster.
+in the cluster. Because the chart uses host networking, it is not compatible with 
+the [Baseline](https://kubernetes.io/docs/concepts/security/pod-security-standards/) 
+Pod Security Standard. It needs to run in a namespace with the `pod-security.kubernetes.io/enforce: privileged` 
+annotation.
 
 Because SUSS is to be called with http from a script running directly on the host, 
 the SUSS pod uses host networking. This allows it to be called by `curl localhost:9993`.

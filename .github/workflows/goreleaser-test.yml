@@ -38,3 +38,5 @@ jobs:
           args: release --snapshot --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WD_HARBOR_REPOSITORY_NAME: ${{ vars.WD_HARBOR_REPOSITORY_NAME }}
+          

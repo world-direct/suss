@@ -64,8 +64,8 @@ func main() {
 	}
 }
 
-func registerCommand(name string, fn func(ctx xhdl.Context)) {
-	http.HandleFunc("/"+name, func(w http.ResponseWriter, r *http.Request) {
+func getCommandHandler(name string, fn func(ctx xhdl.Context)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 
 		klog.Infof("/%s\n", name)
 
@@ -87,7 +87,11 @@ func registerCommand(name string, fn func(ctx xhdl.Context)) {
 			io.WriteString(w, err.Error())
 
 		}
-	})
+	}
+}
+
+func registerCommand(name string, fn func(ctx xhdl.Context)) {
+	http.HandleFunc("/"+name, getCommandHandler(name, fn))
 }
 
 func initService(ctx xhdl.Context) {

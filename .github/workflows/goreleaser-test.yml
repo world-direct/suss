@@ -36,7 +36,7 @@ jobs:
       - name: set outputs from goreleaser
         run: |
           version=$(echo $MD | jq -r ".version")
-          echo "::set-output name=version::$version"
+          echo "version=$version" >> $GITHUB_OUTPUT
         env:
           MD: ${{steps.goreleaser.outputs.metadata}}
 

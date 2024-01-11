@@ -22,13 +22,6 @@ jobs:
       - name: run tests
         run:  go test ./...
 
-      - name: Login to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ vars.WD_HARBOR_REPOSITORY_NAME }}
-          username: ${{ vars.WD_HARBOR_LIBRARY_USER }}
-          password: ${{ secrets.WD_HARBOR_LIBRARY_PASSWORD }}
-
       - id: goreleaser
         name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v5
@@ -39,4 +32,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WD_HARBOR_REPOSITORY_NAME: ${{ vars.WD_HARBOR_REPOSITORY_NAME }}
-          
+
+      - name: set outputs from goreleaser
+        run: |
+          version=$(echo $MD | jq -r ".version")
+          echo "::set-output name=version::$version"
+        env:
+          MD: ${{steps.goreleaser.outputs.metadata}}
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.WD_HARBOR_REPOSITORY_NAME }}
+          username: ${{ vars.WD_HARBOR_LIBRARY_USER }}
+          password: ${{ secrets.WD_HARBOR_LIBRARY_PASSWORD }}

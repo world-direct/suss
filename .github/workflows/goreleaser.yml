@@ -2,7 +2,8 @@ name: goreleaser
 
 on:
   push:
-    branches: [ "feature/goreleaser" ]
+    tags:
+      - 'v*'
 
 jobs:
   goreleaser:
@@ -30,7 +31,7 @@ jobs:
         with:
           distribution: goreleaser
           version: latest
-          args: release --snapshot --clean
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WD_HARBOR_REPOSITORY_NAME: ${{ vars.WD_HARBOR_REPOSITORY_NAME }}

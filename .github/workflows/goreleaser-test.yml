@@ -7,6 +7,8 @@ on:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    env:
+      version: unknown # we be set by goreleaser
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,9 +38,14 @@ jobs:
       - name: set outputs from goreleaser
         run: |
           version=$(echo $MD | jq -r ".version")
-          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "version=$version" >> $GITHUB_ENV
         env:
           MD: ${{steps.goreleaser.outputs.metadata}}
+
+      - name: retrag and push docker image
+        run: |
+          docker tag ${{ vars.WD_HARBOR_REPOSITORY_NAME }}/suss:latest ${{ vars.WD_HARBOR_REPOSITORY_NAME }}/suss:${{ env.version }}
+          docker push ${{ vars.WD_HARBOR_REPOSITORY_NAME }}/suss:${{ env.version }}
 
       - name: Login to Container Registry
         uses: docker/login-action@v3

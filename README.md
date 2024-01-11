@@ -106,3 +106,12 @@ This is normally only needed for debugging. On cluster deployment InClusterConfi
 *  -nodename: the name of the node running the service. Can be set by NODENAME envvar
 *  -considerSoleReplicasCritical: All pods part of a replicaset with only one replica are critical
 *  -considerStatefulSetCritical: All pods part of a statefulset are critical
+
+# How to release
+
+suss uses [goreleaser](https://github.com/goreleaser/) to create releases.
+It triggers if a tag matching `v*` is pushed.
+
+It will build the binaries, and will push the image to `r.world-direct.at/library/suss`,
+and the helm chart to `r.world-direct.at/library/helm-charts` using the Version 
+as Image-Tag and Chart-Version.

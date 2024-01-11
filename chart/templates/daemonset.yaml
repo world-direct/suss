@@ -15,7 +15,7 @@ spec:
       serviceAccountName: suss
       containers:
         - name: suss
-          image: {{.Values.image.name}}:{{.Values.image.tag}}
+          image: {{.Values.image.name}}:{{coalesce .Values.image.tag .Chart.Version}}
           args: 
 {{- if .Values.criticalPods.considerStatefulSetCritical }}
           - -considerStatefulSetCritical

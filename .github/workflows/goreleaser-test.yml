@@ -1,8 +1,8 @@
 name: goreleaser
 
 on:
-  workflow_dispatch: 
-    
+  push:
+    branches: [ "feature/goreleaser" ]
 
 jobs:
   goreleaser:

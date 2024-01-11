@@ -19,7 +19,12 @@ builds:
     goos:
       - linux
       - darwin
-
+    ignore:
+        - goarch: "386"
+        - goarch: "arm64"
+          goos: "linux"
+        - goarch: "amd64"
+          goos: "darwin"
 archives:
   - format: tar.gz
     # this name template makes the OS and Arch compatible with the results of `uname`.
@@ -44,10 +49,7 @@ changelog:
 
 
 dockers:
-  # You can have multiple Docker images.
-  - #
-    # ID of the image, needed if you want to filter by it later on (e.g. on custom publishers).
-    id: myimg
-
+  - id: myimg
     image_templates:
           - "suss:latest"
+    dockerfile: "./Dockerfile"

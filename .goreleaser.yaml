@@ -15,7 +15,6 @@ before:
   hooks:
     - ./.github/workflows/setversion.sh {{ .Version }}
     - go mod tidy
-    - go test ./...
 
 builds:
   - env:

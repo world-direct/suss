@@ -1,6 +1,9 @@
 image:
   name: r.world-direct.at/library/suss
-  tag: {{ .Chart.Version }}
+
+  # you may set an explicit image tag. If not set the Chart.Version is used
+  tag: ""
+   
 criticalPods:
   considerStatefulSetCritical: true
   considerSoleReplicasCritical: false

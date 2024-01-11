@@ -9,11 +9,11 @@
 version: 1
 
 env:
-  - REPOSITORY={{ if index .Env "WD_HARBOR_REPOSITORY_NAME"  }}{{ .Env.WD_HARBOR_REPOSITORY_NAME }}{{ else }}local{{ end }}
+  - REPOSITORY={{ if index .Env "WD_HARBOR_REPOSITORY_NAME"  }}{{ .Env.WD_HARBOR_REPOSITORY_NAME }}{{ else }}dev{{ end }}
 
 before:
   hooks:
-    # You may remove this if you don't use go modules.
+    - ./.github/workflows/setversion.sh {{ .Version }}
     - go mod tidy
     - go test ./...
 
@@ -54,5 +54,5 @@ changelog:
 dockers:
   - id: myimg
     image_templates:
-    - "{{ .Env.REPOSITORY }}/suss:latest"
     - "{{ .Env.REPOSITORY }}/suss:{{ .Version }}"
+    - "{{ .Env.REPOSITORY }}/suss:latest"

@@ -1,6 +1,6 @@
 image:
   name: r.world-direct.at/library/suss
-  tag: latest
+  tag: {{ .Chart.Version }}
 criticalPods:
   considerStatefulSetCritical: true
   considerSoleReplicasCritical: false

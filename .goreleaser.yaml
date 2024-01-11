@@ -8,6 +8,9 @@
 
 version: 1
 
+env:
+  - REPOSITORY={{ if index .Env "WD_HARBOR_REPOSITORY_NAME"  }}{{ .Env.WD_HARBOR_REPOSITORY_NAME }}{{ else }}local{{ end }}
+
 before:
   hooks:
     # You may remove this if you don't use go modules.
@@ -48,9 +51,8 @@ changelog:
       - "^docs:"
       - "^test:"
 
-
 dockers:
   - id: myimg
     image_templates:
-    - "suss:latest"
-    - "suss:{{ .Version }}"
+    - "{{ .Env.REPOSITORY }}/suss:latest"
+    - "{{ .Env.REPOSITORY }}/suss:{{ .Version }}"

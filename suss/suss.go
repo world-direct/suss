@@ -3,6 +3,7 @@ package suss
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gprossliner/xhdl"
@@ -186,7 +187,9 @@ func (srv service) ReleaseDelayed(ctx xhdl.Context) {
 
 // getTSValue returns a timestamp based value for labels
 func getTSValue() string {
-	return fmt.Sprintf("%v", time.Now().Unix())
+	t := time.Now().UTC().Format(time.RFC3339)
+	t = strings.ReplaceAll(t, ":", "_")
+	return t
 }
 
 func (srv service) TestFail(ctx xhdl.Context) {

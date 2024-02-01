@@ -9,13 +9,30 @@ command -v dnf > /dev/null || alias dnf="yum"
 SUSS_URL=http://localhost:9993
 
 function suss {  
-    echo "SUSS: $1"
-    curl --fail "$SUSS_URL/$1"
 
-    if [[ "$?" != "0" ]]; then
-        echo "SUSS call failed, stop script execution"
+    local max_attempts=5
+    local attempt=0
+    local rc=0
+
+    while [[ $attempt < $max_attempts ]]; do
+        echo "SUSS: $1"
+        curl --fail --silent "$SUSS_URL/$1"
+        rc=$?
+
+        if [[ $rc == 0 ]]; then
+            break
+        fi
+
+        attempt=$(( attempt + 1 ))
+        sleep 10
+        echo "SUSS call failed, retrying..."
+    done
+
+    if [[ $rc != "0" ]]; then
+        echo "SUSS call failed $max_attempts times, stop script execution"
         exit 1
     fi 
+
 }
 
 # check for updates first 

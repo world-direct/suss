@@ -48,10 +48,14 @@ func (srv service) apiLabelPod(ctx xhdl.Context, pod *v1.Pod, name, value string
 	ctx.Throw(err)
 }
 
-func (srv service) GetCriticalPods(ctx xhdl.Context) {
+func (srv service) GetCriticalPods(ctx xhdl.Context) []string {
 
-	// .CriticalPods logs with cc, so we do not need to return something
-	srv.getNodeSet(ctx).OwnNode().CriticalPods(ctx)
+	var lst []string
+	for _, pod := range srv.getNodeSet(ctx).OwnNode().CriticalPods(ctx) {
+		lst = append(lst, fmt.Sprintf("%s/%s", pod.Namespace, pod.Name))
+	}
+
+	return lst
 }
 
 func (n Node) CriticalPods(ctx xhdl.Context) []v1.Pod {

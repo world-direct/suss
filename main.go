@@ -47,12 +47,12 @@ func main() {
 	http.HandleFunc("/version", cmdVersion)
 	http.HandleFunc("/healthz", cmdHealthz)
 	http.HandleFunc("/logstream", cmdLogStream)
+	http.HandleFunc("/criticalpods", cmdCriticalPods)
 
 	registerCommand("synchronize", func(ctx xhdl.Context) { service.Synchronize(ctx) })
 	registerCommand("teardown", func(ctx xhdl.Context) { service.Teardown(ctx) })
 	registerCommand("release", func(ctx xhdl.Context) { service.Release(ctx) })
 	registerCommand("releasedelayed", func(ctx xhdl.Context) { service.ReleaseDelayed(ctx) })
-	registerCommand("criticalpods", func(ctx xhdl.Context) { service.GetCriticalPods(ctx) })
 	registerCommand("testfail", func(ctx xhdl.Context) { service.TestFail(ctx) })
 
 	klog.Infof("listen on %s\n", fBindAddress)
@@ -173,4 +173,18 @@ func cmdLogStream(w http.ResponseWriter, r *http.Request) {
 	<-r.Context().Done()
 
 	unregisterLogWriter(w)
+}
+
+func cmdCriticalPods(w http.ResponseWriter, r *http.Request) {
+	err := xhdl.RunContext(r.Context(), func(ctx xhdl.Context) {
+		criticalPods := service.GetCriticalPods(ctx)
+		for _, p := range criticalPods {
+			io.WriteString(w, p+"\n")
+		}
+	})
+
+	if err != nil {
+		io.WriteString(w, err.Error())
+		w.WriteHeader(500)
+	}
 }

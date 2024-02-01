@@ -33,7 +33,7 @@ type Service interface {
 	Teardown(ctx xhdl.Context)
 	Release(ctx xhdl.Context)
 	ReleaseDelayed(ctx xhdl.Context)
-	GetCriticalPods(ctx xhdl.Context)
+	GetCriticalPods(ctx xhdl.Context) []string
 	TestFail(ctx xhdl.Context)
 }
 

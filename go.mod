@@ -4,7 +4,7 @@ go 1.21.5
 
 require (
 	k8s.io/apimachinery v0.29.1
-	k8s.io/client-go v0.29.0
+	k8s.io/client-go v0.29.1
 )
 
 require github.com/pmezard/go-difflib v1.0.0 // indirect

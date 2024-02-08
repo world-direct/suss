@@ -4,7 +4,7 @@ set -u
 # we don't use -e (fail on error here, because we need to handle explicit exit codes)
 
 # alias yum for CENTOS-7
-command -v dnf > /dev/null || alias dnf="yum"
+# command -v dnf > /dev/null || alias dnf="yum"
 
 SUSS_URL=http://localhost:9993
 
@@ -37,7 +37,7 @@ function suss {
 
 # check for updates first 
 # https://dnf.readthedocs.io/en/latest/command_ref.html#check-update-command
-dnf check-update
+yum check-update
 rc=$?
 if [[ "$rc" == "0" ]]; then
     echo "No package updates available, exiting"
@@ -60,7 +60,7 @@ suss teardown
 
 # and finally run update
 # https://dnf.readthedocs.io/en/latest/command_ref.html#upgrade-command-label
-dnf update -y
+yum update -y
 rc=$?
 if [[ "$rc" != "0" ]]; then
     echo "dnf update failed, releasing lock"

@@ -50,7 +50,7 @@ fi
 
 # start logstream, will be killed by trap
 trap 'echo "stopping logstream";kill $log_pid' SIGINT SIGTERM EXIT
-curl $SUSS_URL/logstream & log_pid=$!
+curl --silent $SUSS_URL/logstream & log_pid=$!
 
 # synchronize with other hosts
 suss synchronize

@@ -10,7 +10,7 @@ SUSS_URL=http://localhost:9993
 
 function suss {  
 
-    local max_attempts=5
+    local max_attempts=150
     local attempt=0
     local rc=0
 

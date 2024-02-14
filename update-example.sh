@@ -14,7 +14,7 @@ function suss {
     local attempt=0
     local rc=0
 
-    while [[ $attempt < $max_attempts ]]; do
+    while [[ $attempt -lt $max_attempts ]]; do
         echo "SUSS: $1"
         curl --fail --silent "$SUSS_URL/$1"
         rc=$?

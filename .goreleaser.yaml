@@ -49,4 +49,4 @@ dockers:
     skip_push: false
     
     image_templates:
-    - "{{ .Env.REPOSITORY }}/suss:{{.Version}}"
+    - "{{ .Env.REPOSITORY }}:{{.Version}}"

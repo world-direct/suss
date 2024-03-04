@@ -41,7 +41,7 @@ jobs:
           args: release --clean --snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: ${{ github.repository_owner }}/suss
+          REPOSITORY: ghcr.io/${{ github.repository_owner }}/suss
 
     #   - name: build and push chart
     #     run: |

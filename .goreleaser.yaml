@@ -45,9 +45,8 @@ changelog:
 dockers:
   - id: app
 
-    # we push outside of golreleaser to have more control over this stage
-    # we can just retag or may build an own image based on this one
-    skip_push: true
+    # we push the image directly
+    skip_push: false
     
     image_templates:
     - "{{ .Env.REPOSITORY }}/suss:{{.Version}}"

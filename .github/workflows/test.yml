@@ -10,14 +10,23 @@ jobs:
 
   validate:
     runs-on: ubuntu-latest
+    env:
+      goversion: "" # will read from go.mod
+      
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: extract go version from go.mod
+        run: |
+          goversion=$(go list -f {{.GoVersion}} -m)
+          echo "goversion=$goversion" >> $GITHUB_ENV
+          echo "goversion=$goversion" # log output
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.21.5
+          go-version: ${{ env.goversion }}
           cache: true
 
       - name: run tests
